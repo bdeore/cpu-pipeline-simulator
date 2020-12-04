@@ -1,0 +1,11 @@
+/apex_cpu.o
+/apex_sim
+/file_parser.o
+/main.o
+.idea
+/cmake-build-debug
+/b_apex_cpu.o
+/b_apex_sim
+/apex_sim_b
+/apex_cpu_b.o
+/apex_sim.tar.gz
