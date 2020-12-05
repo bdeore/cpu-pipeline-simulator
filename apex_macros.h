@@ -9,6 +9,7 @@
 
 /* Size of integer register file */
 #define REG_FILE_SIZE 48
+#define RENAME_TABLE_SIZE 16
 #define ROB_SIZE 64
 #define IQ_SIZE 24
 
