@@ -128,6 +128,21 @@ APEX_fetch(APEX_CPU *cpu) {
     if (cpu->fetch_from_next_cycle == TRUE) {
       cpu->fetch_from_next_cycle = FALSE;
 
+      /* Store current PC in fetch latch */
+      cpu->fetch.pc = cpu->pc;
+
+      /* Index into code memory using this pc and copy all instruction fields
+       * into fetch latch  */
+      current_ins = &cpu->code_memory[get_code_memory_index_from_pc(cpu->pc)];
+      // printf("opcode_str: %s\n", current_ins->opcode_str);
+      strcpy(cpu->fetch.opcode_str, current_ins->opcode_str);
+      cpu->fetch.opcode = current_ins->opcode;
+      cpu->fetch.rd = current_ins->rd;
+      cpu->fetch.rs1 = current_ins->rs1;
+      cpu->fetch.rs2 = current_ins->rs2;
+      cpu->fetch.rs3 = current_ins->rs3;
+      cpu->fetch.imm = current_ins->imm;
+
       /* Update PC for next instruction */
       if (cpu->debug_messages) {
         print_stage_content("Fetch", &cpu->fetch);
@@ -177,6 +192,9 @@ static void
 APEX_decode(APEX_CPU *cpu) {
   bool stall = false;
   if (cpu->decode.has_insn) {
+    if (cpu->rob_full || cpu->iq_full) {
+      stall = true;
+    }
     /* Read operands from register file based on the instruction type */
     switch (cpu->decode.opcode) {
       case OPCODE_ADD:
@@ -186,79 +204,42 @@ APEX_decode(APEX_CPU *cpu) {
       case OPCODE_OR:
       case OPCODE_XOR:
       case OPCODE_LDR: {
-        // check if registers are valid
-        if (cpu->status[cpu->decode.rs1] == 1 || cpu->status[cpu->decode.rs2] == 1) {
-          stall = true;
-        } else {
-          // check if result has already been forwarded
-          if (cpu->forwarded[cpu->decode.rs1] != 1)
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
 
-          if (cpu->forwarded[cpu->decode.rs2] != 1)
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-
-          // Mark register as invalid
-          cpu->status[cpu->decode.rd] = 1;
-        }
+        // Mark register as invalid
+        cpu->status[cpu->decode.rd] = 1;
         break;
       }
 
       case OPCODE_CMP: {
-        if (cpu->status[cpu->decode.rs1] == 1 || cpu->status[cpu->decode.rs2] == 1) {
-          stall = true;
-        } else {
-          if (cpu->forwarded[cpu->decode.rs1] != 1)
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
 
-          if (cpu->forwarded[cpu->decode.rs2] != 1)
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-        }
+        cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
         break;
       }
 
       case OPCODE_LOAD:
       case OPCODE_ADDL:
       case OPCODE_SUBL: {
-        if (cpu->status[cpu->decode.rs1] == 1) {
-          stall = true;
-        } else {
-          if (cpu->forwarded[cpu->decode.rs1] != 1)
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-
-          cpu->status[cpu->decode.rd] = 1;
-        }
+        cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        cpu->status[cpu->decode.rd] = 1;
         break;
       }
 
       case OPCODE_STR: {
-        if (cpu->status[cpu->decode.rs1] == 1 || cpu->status[cpu->decode.rs2] == 1
-            || cpu->status[cpu->decode.rs3] == 1) {
-          stall = true;
-        } else {
-          if (cpu->forwarded[cpu->decode.rs1] != 1)
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-
-          if (cpu->forwarded[cpu->decode.rs2] != 1)
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-
-          if (cpu->forwarded[cpu->decode.rs3] != 1)
-            cpu->decode.rs3_value = cpu->regs[cpu->decode.rs3];
-        }
+        cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+        cpu->decode.rs3_value = cpu->regs[cpu->decode.rs3];
         break;
       }
 
       case OPCODE_STORE: {
-        if (cpu->status[cpu->decode.rs1] == 1 || cpu->status[cpu->decode.rs2] == 1) {
-          stall = true;
-        } else {
-          if (cpu->forwarded[cpu->decode.rs1] != 1)
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
 
-          if (cpu->forwarded[cpu->decode.rs2] != 1)
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-        }
-        break;
+        cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
       }
+        break;
 
       case OPCODE_MOVC: {
         /* MOVC doesn't have register operands */
@@ -274,7 +255,8 @@ APEX_decode(APEX_CPU *cpu) {
     }
 
     if (!stall) {
-      cpu->execute = cpu->decode;
+      APEX_dispatch(cpu);
+      APEX_issue(cpu);
     } else {
       CPU_Stage nop;
       nop = get_nop_stage(&nop);
@@ -295,7 +277,6 @@ APEX_decode(APEX_CPU *cpu) {
  */
 static void
 APEX_execute(APEX_CPU *cpu) {
-
   if (cpu->execute.has_insn) {
     /* Execute logic based on instruction type */
     switch (cpu->execute.opcode) {
@@ -424,8 +405,6 @@ APEX_execute(APEX_CPU *cpu) {
         break;
       }
     }
-    // forward data from ex to decode stage
-    forward_data_ex(cpu);
 
     /* Copy data from execute latch to memory latch*/
     cpu->memory = cpu->execute;
@@ -444,7 +423,6 @@ APEX_execute(APEX_CPU *cpu) {
  */
 static void
 APEX_memory(APEX_CPU *cpu) {
-
   if (cpu->memory.has_insn) {
     switch (cpu->memory.opcode) {
       case OPCODE_ADD:
@@ -487,8 +465,6 @@ APEX_memory(APEX_CPU *cpu) {
       }
     }
 
-    // forward data from mem to decode stage
-    forward_data_mem(cpu);
 
     /* Copy data from memory latch to writeback latch*/
     cpu->writeback = cpu->memory;
@@ -523,7 +499,6 @@ APEX_writeback(APEX_CPU *cpu) {
       case OPCODE_SUBL: {
         cpu->regs[cpu->writeback.rd] = cpu->writeback.result_buffer;
         cpu->status[cpu->writeback.rd] = 0;
-        cpu->forwarded[cpu->writeback.rd] = 0;
         break;
       }
 
@@ -579,11 +554,14 @@ APEX_cpu_init(const char *filename) {
   cpu->pc = 4000;
   memset(cpu->regs, 0, sizeof(int) * REG_FILE_SIZE);
   memset(cpu->status, 0, sizeof(int) * REG_FILE_SIZE);
-  memset(cpu->forwarded, 0, sizeof(int) * REG_FILE_SIZE);
   memset(cpu->data_memory, 0, sizeof(int) * DATA_MEMORY_SIZE);
+  memset(cpu->iq_entry_used, 0, sizeof(int) * DATA_MEMORY_SIZE);
 
   cpu->single_step = ENABLE_SINGLE_STEP;
   cpu->clock = 1;
+  cpu->reorder_buffer = get_reorder_buffer();
+  cpu->rob_full = false;
+  cpu->iq_full = false;
 
   /* Parse input file and create code memory */
   cpu->code_memory = create_code_memory(filename, &cpu->code_memory_size);
@@ -748,12 +726,12 @@ void print_stage_contents(CPU_Stage *stage, char *name) {
   printf("                 Stage: %-6s                   \n", name);
   printf("-------------------------------------------------\n");
 
-  printf("|   pc  : %-4d       Opcode         : %-5s     |\n", stage->pc, stage->opcode_str);
+  printf("|   pc  : %4d       Opcode         : %-5s     |\n", stage->pc, stage->opcode_str);
   printf("|   rd  : R%-2d        result_buffer  : %-5d     |\n", stage->rd, stage->result_buffer);
   printf("|   rs1 : R%-2d        rs1_value      : %-5d     |\n", stage->rs1, stage->rs1_value);
   printf("|   rs2 : R%-2d        rs2_value      : %-5d     |\n", stage->rs2, stage->rs2_value);
   printf("|   rs3 : R%-2d        rs3_value      : %-5d     |\n", stage->rs3, stage->rs3_value);
-  printf("|   imm : %-4d       memory_address : %-5d     |\n", stage->imm, stage->memory_address);
+  printf("|   imm : R%-2d        memory_address : %-5d     |\n", stage->imm, stage->memory_address);
 
 }
 
@@ -795,142 +773,124 @@ CPU_Stage get_nop_stage(CPU_Stage *nop) {
   return *nop;
 }
 
-/**
- * Method to forward data from execute stage to decode/rf stage
- *
- * @param cpu pointer to current instance of cpu
- */
-void forward_data_ex(APEX_CPU *cpu) {
-  if (!(cpu->execute.opcode == 0x8 || cpu->execute.opcode == 0x9 || cpu->execute.opcode == 0xf
-      || cpu->execute.opcode == 0x10)) {
-    switch (cpu->decode.opcode) {
-      case OPCODE_ADD:
-      case OPCODE_SUB:
-      case OPCODE_MUL:
-      case OPCODE_AND:
-      case OPCODE_OR:
-      case OPCODE_XOR:
-      case OPCODE_LDR:
-      case OPCODE_CMP:
-      case OPCODE_MOVC: {
-        if (cpu->execute.rd == cpu->decode.rs1) {
-          cpu->decode.rs1_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
+ROB_Queue get_reorder_buffer() {
+  ROB_Queue queue;
+  queue.head = -1;
+  queue.tail = 0;
+  return queue;
+}
 
-        if (cpu->execute.rd == cpu->decode.rs2) {
-          cpu->decode.rs2_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
-        break;
-      }
+bool insert_rob_entry(APEX_CPU *cpu, ROB_Entry rob_entry) {
+  if (cpu->reorder_buffer.tail == 64) cpu->reorder_buffer.tail %= 64;
+  else if (cpu->reorder_buffer.head == 64) cpu->reorder_buffer.head %= 64;
 
-      case OPCODE_ADDL:
-      case OPCODE_SUBL:
-      case OPCODE_LOAD: {
-        if (cpu->execute.rd == cpu->decode.rs1) {
-          cpu->decode.rs1_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
-        break;
-      }
+  if (cpu->reorder_buffer.tail == cpu->reorder_buffer.head) {
+    cpu->rob_full = true;
+    return false;
+  }
 
-      case OPCODE_STORE: {
-        if (cpu->execute.rd == cpu->decode.rs2) {
-          cpu->decode.rs2_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
-        break;
-      }
+  if (cpu->reorder_buffer.head == -1) {
+    cpu->reorder_buffer.head = 0;
+    cpu->reorder_buffer.tail = 0;
+  }
 
-      case OPCODE_STR: {
-        if (cpu->execute.rd == cpu->decode.rs3) {
-          cpu->decode.rs3_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
+  strcpy(cpu->reorder_buffer.buffer[cpu->reorder_buffer.tail].instruction_type, rob_entry.instruction_type);
+  cpu->reorder_buffer.buffer[cpu->reorder_buffer.tail].pc_value = rob_entry.pc_value;
+  cpu->reorder_buffer.buffer[cpu->reorder_buffer.tail].status = rob_entry.status;
+  cpu->reorder_buffer.buffer[cpu->reorder_buffer.tail].dest_architectural_reg = rob_entry.dest_architectural_reg;
+  cpu->reorder_buffer.buffer[cpu->reorder_buffer.tail].dest_physical_reg = rob_entry.dest_physical_reg;
 
-        if (cpu->execute.rd == cpu->decode.rs2) {
-          cpu->decode.rs2_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
+  return true;
+}
 
-        if (cpu->execute.rd == cpu->decode.rs1) {
-          cpu->decode.rs1_value = cpu->execute.result_buffer;
-          cpu->forwarded[cpu->execute.rd] = 1;
-          cpu->status[cpu->execute.rd] = 0;
-        }
+bool increment_rob_head(APEX_CPU *cpu) {
+  cpu->reorder_buffer.head++;
+  if (cpu->reorder_buffer.head == ROB_SIZE) cpu->reorder_buffer.head %= ROB_SIZE;
+  return true;
+}
+
+bool increment_rob_tail(APEX_CPU *cpu) {
+  cpu->reorder_buffer.tail++;
+  if (cpu->reorder_buffer.tail == ROB_SIZE) cpu->reorder_buffer.tail %= ROB_SIZE;
+  return true;
+}
+
+void APEX_dispatch(APEX_CPU *cpu) {
+  if (!cpu->rob_full && !cpu->iq_full) {
+    ROB_Entry rob_entry;
+    rob_entry.status = false;
+    rob_entry.dest_physical_reg = cpu->decode.rd;
+    rob_entry.pc_value = cpu->decode.pc;
+    int opcode = cpu->decode.opcode;
+    if (opcode == 0 || opcode == 1 || opcode == 2 || opcode == 3 || opcode == 4 || opcode == 5 || opcode == 6
+        || opcode == 13 || opcode == 14) {
+      strcpy(rob_entry.instruction_type, "r2r");
+    } else {
+      strcpy(rob_entry.instruction_type, "not_r2r");
+    }
+
+    insert_rob_entry(cpu, rob_entry);
+    increment_rob_tail(cpu);
+
+    for (int i = 0; i <= IQ_SIZE; i++) {
+      if (cpu->iq_entry_used[i] == 0) {
+        IQ_Entry *iq_entry = &cpu->issue_queue[0];
+        iq_entry->pc = cpu->decode.pc;
+        iq_entry->opcode = cpu->decode.opcode;
+        strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+        iq_entry->rs1 = cpu->decode.rs1;
+        iq_entry->rs2 = cpu->decode.rs2;
+        iq_entry->rs3 = cpu->decode.rs3;
+        iq_entry->rd = cpu->decode.rd;
+        iq_entry->imm = cpu->decode.imm;
+        iq_entry->rs1_value = cpu->decode.rs1_value;
+        iq_entry->rs2_value = cpu->decode.rs2_value;
+        iq_entry->rs3_value = cpu->decode.rs3_value;
+        iq_entry->cycle_number = cpu->clock;
+        cpu->iq_entry_used[i] = 1;
+        if (i == IQ_SIZE) cpu->iq_full = true;
         break;
       }
     }
+  } else
+    printf("\nIQ or ROB is full\n");
+
+//  print_issue_queue(cpu);
+//  print_reorder_buffer(cpu);
+
+}
+
+void APEX_issue(APEX_CPU *cpu) {
+  CPU_Stage stage;
+  IQ_Entry *iq_entry = &cpu->issue_queue[0];
+
+  stage.pc = iq_entry->pc;
+  stage.opcode = cpu->decode.opcode;
+  strcpy(stage.opcode_str, iq_entry->opcode_str);
+  stage.rs1 = iq_entry->rs1;
+  stage.rs2 = iq_entry->rs2;
+  stage.rs3 = iq_entry->rs3;
+  stage.rd = iq_entry->rd;
+  stage.imm = iq_entry->imm;
+  stage.rs1_value = iq_entry->rs1_value;
+  stage.rs2_value = iq_entry->rs2_value;
+  stage.rs3_value = iq_entry->rs3_value;
+
+  cpu->execute = stage;
+}
+
+void print_issue_queue(APEX_CPU *cpu) {
+
+  for (int i = 0; i < IQ_SIZE; i++) {
+    if (cpu->iq_entry_used[i])
+      printf("\nInstruction at IQ[%d]: %d", i, cpu->issue_queue[i].pc);
   }
 }
 
-/**
- * Method to forward data from memory stage to decode/rf stage
- *
- * @param cpu pointer to current instance of cpu
- */
-void forward_data_mem(APEX_CPU *cpu) {
-  if (!(cpu->memory.opcode == 0x9 || cpu->memory.opcode == 0x10)) {
-    switch (cpu->decode.opcode) {
-      case OPCODE_ADD:
-      case OPCODE_SUB:
-      case OPCODE_MUL:
-      case OPCODE_AND:
-      case OPCODE_OR:
-      case OPCODE_XOR:
-      case OPCODE_LDR:
-      case OPCODE_CMP:
-      case OPCODE_MOVC: {
-        if (cpu->memory.rd == cpu->decode.rs1) {
-          cpu->decode.rs1_value = cpu->memory.result_buffer;
-          cpu->forwarded[cpu->memory.rd] = 1;
-          cpu->status[cpu->memory.rd] = 0;
-        } else if (cpu->memory.rd == cpu->decode.rs2) {
-          cpu->decode.rs2_value = cpu->memory.result_buffer;
-          cpu->forwarded[cpu->memory.rd] = 1;
-          cpu->status[cpu->memory.rd] = 0;
-        }
-        break;
-      }
+void print_reorder_buffer(APEX_CPU *cpu) {
 
-      case OPCODE_ADDL:
-      case OPCODE_SUBL:
-      case OPCODE_LOAD: {
-        if (cpu->memory.rd == cpu->decode.rs1) {
-          cpu->decode.rs1_value = cpu->memory.result_buffer;
-          cpu->forwarded[cpu->memory.rd] = 1;
-          cpu->status[cpu->memory.rd] = 0;
-        }
-        break;
-      }
-
-      case OPCODE_STORE: {
-        if (cpu->memory.rd == cpu->decode.rs2) {
-          cpu->decode.rs2_value = cpu->memory.result_buffer;
-          cpu->forwarded[cpu->memory.rd] = 1;
-          cpu->status[cpu->memory.rd] = 0;
-        }
-        break;
-      }
-
-      case OPCODE_STR: {
-        if (cpu->memory.rd == cpu->decode.rs3) {
-          cpu->decode.rs3_value = cpu->memory.result_buffer;
-          cpu->status[cpu->memory.rd] = 0;
-        } else if (cpu->memory.rd == cpu->decode.rs2) {
-          cpu->decode.rs2_value = cpu->memory.result_buffer;
-          cpu->forwarded[cpu->memory.rd] = 1;
-          cpu->status[cpu->memory.rd] = 0;
-        }
-        break;
-      }
-    }
+  for (int i = 0; i < cpu->reorder_buffer.tail; i++) {
+    printf("\nInstruction at ROB[%d]: %d head: %d tail: %d", i, cpu->reorder_buffer.buffer[i].pc_value,
+           cpu->reorder_buffer.head, cpu->reorder_buffer.tail);
   }
 }

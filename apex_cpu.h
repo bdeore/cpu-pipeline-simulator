@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdbool.h>
 
 /* Format of an APEX instruction  */
 typedef struct APEX_Instruction {
@@ -37,21 +38,57 @@ typedef struct CPU_Stage {
   int has_insn;
 } CPU_Stage;
 
+typedef struct IQ_Entry {
+  int pc;
+  char opcode_str[128];
+  int opcode;
+  int rs1;
+  int rs2;
+  int rs3;
+  int rd;
+  int imm;
+  int rs1_value;
+  int rs2_value;
+  int rs3_value;
+  int cycle_number;
+  bool valid;
+} IQ_Entry;
+
+/* Format of ROB entry */
+typedef struct ROB_Entry {
+  bool status;
+  char instruction_type[50];
+  int pc_value;
+  int dest_physical_reg;
+  int dest_architectural_reg;
+} ROB_Entry;
+
+typedef struct ROB_Queue {
+  int head, tail;
+  ROB_Entry buffer[ROB_SIZE];
+} ROB_Queue;
+
 /* Model of APEX CPU */
 typedef struct APEX_CPU {
-  int pc;                        /* Current program counter */
-  int clock;                     /* Clock cycles elapsed */
-  int insn_completed;            /* Instructions retired */
-  int regs[REG_FILE_SIZE];       /* Integer register file */
-  int status[REG_FILE_SIZE];     /* status bits for each register in register file */
-  int forwarded[REG_FILE_SIZE];  /* status bits to indicate if result has been forwarded */
-  int code_memory_size;          /* Number of instruction in the input file */
-  APEX_Instruction *code_memory; /* Code Memory */
-  int data_memory[DATA_MEMORY_SIZE]; /* Data Memory */
-  int single_step;               /* Wait for user input after every cycle */
-  int zero_flag;                 /* {TRUE, FALSE} Used by BZ and BNZ to branch */
-  int fetch_from_next_cycle;     /* flag to enable disable debug messages */
+  int pc;                                       /* Current program counter */
+  int clock;                                    /* Clock cycles elapsed */
+  int insn_completed;                           /* Instructions retired */
+  int regs[REG_FILE_SIZE];                      /* Unified Integer register file */
+  int status[REG_FILE_SIZE];                    /* status bits for each register in register file */
+  int forwarded[REG_FILE_SIZE];                 /* status bits to indicate if result has been forwarded */
+  int iq_entry_used[IQ_SIZE];                   /* status bits to indicate empty issue queue entries */
+  IQ_Entry issue_queue[IQ_SIZE];                /* issue queue */
+  ROB_Queue reorder_buffer;                     /* reorder buffer */
+  int code_memory_size;                         /* Number of instruction in the input file */
+  APEX_Instruction *code_memory;                /* Code Memory */
+  int data_memory[DATA_MEMORY_SIZE];            /* Data Memory */
+  int single_step;                              /* Wait for user input after every cycle */
+  int zero_flag;                                /* {TRUE, FALSE} Used by BZ and BNZ to branch */
+  int fetch_from_next_cycle;                    /* flag to enable disable debug messages */
   int debug_messages;
+  bool rob_full;
+  bool iq_full;
+
   /* Pipeline stages */
   CPU_Stage fetch;
   CPU_Stage decode;
@@ -72,5 +109,13 @@ void show_mem(APEX_CPU *cpu, int address);
 CPU_Stage get_nop_stage(CPU_Stage *nop);
 void forward_data_mem(APEX_CPU *cpu);
 void forward_data_ex(APEX_CPU *cpu);
+
+void APEX_issue(APEX_CPU *cpu);
+void APEX_dispatch(APEX_CPU *cpu);
+ROB_Queue get_reorder_buffer();
+bool insert_rob_entry(APEX_CPU *cpu, ROB_Entry rob_entry);
+bool increment_rob_head(APEX_CPU *cpu);
+void print_issue_queue(APEX_CPU *cpu);
+void print_reorder_buffer(APEX_CPU *cpu);
 
 #endif

@@ -8,7 +8,9 @@
 #define DATA_MEMORY_SIZE 4096
 
 /* Size of integer register file */
-#define REG_FILE_SIZE 16
+#define REG_FILE_SIZE 48
+#define ROB_SIZE 64
+#define IQ_SIZE 24
 
 /* Numeric OPCODE identifiers for instructions */
 #define OPCODE_ADD 0x0
