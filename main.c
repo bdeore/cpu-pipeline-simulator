@@ -82,7 +82,7 @@ void generate_prompt(APEX_CPU *cpu, const char *filename) {
       }
     }
     if (cpu != NULL) {
-      if ((cpu->insn_completed == cpu->code_memory_size || cpu->writeback.opcode == 12) &&
+      if ((cpu->insn_completed == cpu->code_memory_size) &&
           ((strcmp(user_prompt_val, "simulate") == 0 || strcmp(user_prompt_val, "Simulate") == 0) ||
               strcmp(user_prompt_val, "n") == 0 || strcmp(user_prompt_val, "N") == 0)) {
         printf("\nAPEX_CPU: Simulation Complete, cycles = %d instructions retired = %d\n",

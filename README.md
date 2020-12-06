@@ -1,5 +1,5 @@
 # APEX Pipeline Simulator
-A simulator for 5 stage APEX in-order pipeline with data forwarding
+A simulator for 5 stage APEX out-of--order pipeline with data forwarding
 
 ## How to compile and run
 

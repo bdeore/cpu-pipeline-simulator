@@ -26,4 +26,4 @@ clean:
 	rm -f *.o *.d *~ $(PROGS)
 
 cpu:clean all
-	./apex_sim	input.asm
+	./apex_sim	old_input.asm

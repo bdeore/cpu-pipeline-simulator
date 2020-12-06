@@ -2,66 +2,269 @@
 #include "apex_macros.h"
 
 void APEX_dispatch(APEX_CPU *cpu) {
-  if (!cpu->rob_full && !cpu->iq_full) {
-//    insert_rob_entry(cpu);
-    insert_iq_entry(cpu);
-  } else {
+  if (cpu->rob_full || cpu->iq_full) {
     cpu->fetch_from_next_cycle = TRUE;
 
     if (cpu->rob_full)
       printf("\nROB is full\n");
     else if (cpu->iq_full)
       printf("\nIQ is full\n");
+  } else {
+
+//    insert_rob_entry(cpu);
+    insert_iq_entry(cpu);
+
   }
 }
 
 void APEX_issue(APEX_CPU *cpu) {
-  CPU_Stage stage;
-  IQ_Entry *iq_entry = &cpu->issue_queue[0];
+  cpu->intu = pick_entry(cpu, "intu");
+  if (cpu->mulu_count == 0)
+    cpu->mulu = pick_entry(cpu, "mulu");
+}
 
-  stage.pc = iq_entry->pc;
-  stage.opcode = cpu->decode.opcode;
-  strcpy(stage.opcode_str, iq_entry->opcode_str);
-  stage.rs1 = iq_entry->rs1;
-  stage.rs2 = iq_entry->rs2;
-  stage.rs3 = iq_entry->rs3;
-  stage.rd = iq_entry->rd;
-  stage.imm = iq_entry->imm;
-  stage.rs1_value = iq_entry->rs1_value;
-  stage.rs2_value = iq_entry->rs2_value;
-  stage.rs3_value = iq_entry->rs3_value;
+CPU_Stage pick_entry(APEX_CPU *cpu, char *function_unit) {
+  IQ_Entry *iq_entry;
+  CPU_Stage nop;
+  int earliest_request = 999999999;
 
-  cpu->intu = stage;
+  for (int i = 0; i <= IQ_SIZE; i++) {
+    if (i == IQ_SIZE - 1) {
+      if (earliest_request == 999999999) {
+        nop = get_nop_stage(&nop);
+        return nop;
+      } else {
+        return remove_iq_entry(cpu, earliest_request);
+      }
+    } else {
+      if (cpu->iq_entry_used[i] == 1) {
+        iq_entry = &cpu->issue_queue[i];
+        if (iq_entry->valid) {
+
+          if (strcmp(function_unit, "intu") == 0) {
+            if (!(iq_entry->opcode == 8 || iq_entry->opcode == 9 || iq_entry->opcode == 15 || iq_entry->opcode == 16
+                || iq_entry->opcode == 2 || iq_entry->opcode == 0xa || iq_entry->opcode == 0xb
+                || iq_entry->opcode == 0xc || iq_entry->opcode == 0x12)) {
+              if (iq_entry->cycle_number < earliest_request) {
+                earliest_request = i;
+              }
+            }
+          } else if (strcmp(function_unit, "mulu") == 0) {
+            if (iq_entry->opcode == 2) {
+              if (iq_entry->cycle_number < earliest_request) {
+                earliest_request = i;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return get_nop_stage(&nop);
 }
 
 void insert_iq_entry(APEX_CPU *cpu) {
-  for (int i = 0; i <= IQ_SIZE; i++) {
-    if (i == IQ_SIZE) {
+  for (int i = 0; i < IQ_SIZE; i++) {
+    if (i == IQ_SIZE - 1) {
       cpu->iq_full = true;
       cpu->fetch_from_next_cycle = TRUE;
     } else {
       if (cpu->iq_entry_used[i] == 0) {
         IQ_Entry *iq_entry = &cpu->issue_queue[i];
-        iq_entry->pc = cpu->decode.pc;
-        iq_entry->opcode = cpu->decode.opcode;
-        strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
-        iq_entry->rs1 = cpu->decode.rs1;
-        iq_entry->rs2 = cpu->decode.rs2;
-        iq_entry->rs3 = cpu->decode.rs3;
-        iq_entry->rd = cpu->decode.rd;
-        iq_entry->imm = cpu->decode.imm;
-        iq_entry->rs1_value = cpu->decode.rs1_value;
-        iq_entry->rs2_value = cpu->decode.rs2_value;
-        iq_entry->rs3_value = cpu->decode.rs3_value;
-        iq_entry->cycle_number = cpu->clock;
-        cpu->iq_entry_used[i] = 1;
 
+        switch (cpu->decode.opcode) {
+          case OPCODE_ADD:
+          case OPCODE_SUB:
+          case OPCODE_MUL:
+          case OPCODE_AND:
+          case OPCODE_OR:
+          case OPCODE_XOR:
+          case OPCODE_LDR: {
+            iq_entry->pc = cpu->decode.pc;
+            iq_entry->opcode = cpu->decode.opcode;
+            strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+            iq_entry->rs1 = cpu->decode.rs1;
+            iq_entry->rs2 = cpu->decode.rs2;
+            iq_entry->rd = cpu->decode.rd;
+            iq_entry->rs1_value = cpu->decode.rs1_value;
+            iq_entry->rs2_value = cpu->decode.rs2_value;
+            iq_entry->cycle_number = cpu->clock;
+            cpu->iq_entry_used[i] = 1;
+            break;
+          }
+
+          case OPCODE_LOAD:
+          case OPCODE_ADDL:
+          case OPCODE_SUBL: {
+            iq_entry->pc = cpu->decode.pc;
+            iq_entry->opcode = cpu->decode.opcode;
+            strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+            iq_entry->rs1 = cpu->decode.rs1;
+            iq_entry->rd = cpu->decode.rd;
+            iq_entry->imm = cpu->decode.imm;
+            iq_entry->rs1_value = cpu->decode.rs1_value;
+            iq_entry->cycle_number = cpu->clock;
+            cpu->iq_entry_used[i] = 1;
+
+            break;
+          }
+
+          case OPCODE_STORE: {
+            iq_entry->pc = cpu->decode.pc;
+            iq_entry->opcode = cpu->decode.opcode;
+            strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+            iq_entry->rs1 = cpu->decode.rs1;
+            iq_entry->rs2 = cpu->decode.rs2;
+            iq_entry->imm = cpu->decode.imm;
+            iq_entry->rs1_value = cpu->decode.rs1_value;
+            iq_entry->rs2_value = cpu->decode.rs2_value;
+            iq_entry->cycle_number = cpu->clock;
+            cpu->iq_entry_used[i] = 1;
+
+            break;
+          }
+          case OPCODE_STR: {
+            iq_entry->pc = cpu->decode.pc;
+            iq_entry->opcode = cpu->decode.opcode;
+            strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+            iq_entry->rs1 = cpu->decode.rs1;
+            iq_entry->rs2 = cpu->decode.rs2;
+            iq_entry->rs3 = cpu->decode.rs3;
+            iq_entry->rs1_value = cpu->decode.rs1_value;
+            iq_entry->rs2_value = cpu->decode.rs2_value;
+            iq_entry->rs3_value = cpu->decode.rs3_value;
+            iq_entry->cycle_number = cpu->clock;
+            cpu->iq_entry_used[i] = 1;
+            break;
+          }
+
+          case OPCODE_CMP: {
+            iq_entry->pc = cpu->decode.pc;
+            iq_entry->opcode = cpu->decode.opcode;
+            strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+            iq_entry->rs1 = cpu->decode.rs1;
+            iq_entry->rs2 = cpu->decode.rs2;
+            iq_entry->rs1_value = cpu->decode.rs1_value;
+            iq_entry->rs2_value = cpu->decode.rs2_value;
+            iq_entry->cycle_number = cpu->clock;
+            cpu->iq_entry_used[i] = 1;
+            break;
+          }
+
+          case OPCODE_MOVC: {
+            iq_entry->pc = cpu->decode.pc;
+            iq_entry->opcode = cpu->decode.opcode;
+            strcpy(iq_entry->opcode_str, cpu->decode.opcode_str);
+            iq_entry->rd = cpu->decode.rd;
+            iq_entry->imm = cpu->decode.imm;
+            iq_entry->cycle_number = cpu->clock;
+            cpu->iq_entry_used[i] = 1;
+
+            break;
+          }
+        }
         validate_iq_entry(cpu, iq_entry);
 
         break;
       }
     }
   }
+}
+
+CPU_Stage remove_iq_entry(APEX_CPU *cpu, int entry_index) {
+  CPU_Stage stage;
+  IQ_Entry *iq_entry = &cpu->issue_queue[entry_index];
+
+  switch (iq_entry->opcode) {
+    case OPCODE_ADD:
+    case OPCODE_SUB:
+    case OPCODE_MUL:
+    case OPCODE_AND:
+    case OPCODE_OR:
+    case OPCODE_XOR:
+    case OPCODE_LDR: {
+      stage.pc = iq_entry->pc;
+      stage.opcode = iq_entry->opcode;
+      strcpy(stage.opcode_str, iq_entry->opcode_str);
+      stage.rs1 = iq_entry->rs1;
+      stage.rs2 = iq_entry->rs2;
+      stage.rd = iq_entry->rd;
+      stage.rs1_value = iq_entry->rs1_value;
+      stage.rs2_value = iq_entry->rs2_value;
+
+      cpu->iq_entry_used[entry_index] = 0;
+      break;
+    }
+
+    case OPCODE_LOAD:
+    case OPCODE_ADDL:
+    case OPCODE_SUBL: {
+      stage.pc = iq_entry->pc;
+      stage.opcode = iq_entry->opcode;
+      strcpy(stage.opcode_str, iq_entry->opcode_str);
+      stage.rs1 = iq_entry->rs1;
+      stage.rd = iq_entry->rd;
+      stage.imm = iq_entry->imm;
+      stage.rs1_value = iq_entry->rs1_value;
+
+      cpu->iq_entry_used[entry_index] = 0;
+      break;
+    }
+
+    case OPCODE_STORE: {
+      stage.pc = iq_entry->pc;
+      stage.opcode = iq_entry->opcode;
+      strcpy(stage.opcode_str, iq_entry->opcode_str);
+      stage.rs1 = iq_entry->rs1;
+      stage.rs2 = iq_entry->rs2;
+      stage.imm = iq_entry->imm;
+      stage.rs1_value = iq_entry->rs1_value;
+      stage.rs2_value = iq_entry->rs2_value;
+
+      cpu->iq_entry_used[entry_index] = 0;
+      break;
+    }
+
+    case OPCODE_STR: {
+      stage.pc = iq_entry->pc;
+      stage.opcode = iq_entry->opcode;
+      strcpy(stage.opcode_str, iq_entry->opcode_str);
+      stage.rs1 = iq_entry->rs1;
+      stage.rs2 = iq_entry->rs2;
+      stage.rs3 = iq_entry->rs3;
+      stage.rs1_value = iq_entry->rs1_value;
+      stage.rs2_value = iq_entry->rs2_value;
+      stage.rs3_value = iq_entry->rs3_value;
+
+      cpu->iq_entry_used[entry_index] = 0;
+      break;
+    }
+
+    case OPCODE_CMP: {
+      stage.pc = iq_entry->pc;
+      stage.opcode = iq_entry->opcode;
+      strcpy(stage.opcode_str, iq_entry->opcode_str);
+      stage.rs1 = iq_entry->rs1;
+      stage.rs2 = iq_entry->rs2;
+      stage.rs1_value = iq_entry->rs1_value;
+      stage.rs2_value = iq_entry->rs2_value;
+
+      cpu->iq_entry_used[entry_index] = 0;
+      break;
+    }
+
+    case OPCODE_MOVC: {
+      stage.pc = iq_entry->pc;
+      stage.opcode = iq_entry->opcode;
+      strcpy(stage.opcode_str, iq_entry->opcode_str);
+      stage.rd = iq_entry->rd;
+      stage.imm = iq_entry->imm;
+
+      cpu->iq_entry_used[entry_index] = 0;
+      break;
+    }
+  }
+  return stage;
 }
 
 /*
@@ -141,157 +344,158 @@ APEX_fetch(APEX_CPU *cpu) {
 static void
 APEX_decode(APEX_CPU *cpu) {
   if (cpu->decode.has_insn) {
-    /* Read operands from register file based on the instruction type */
-    switch (cpu->decode.opcode) {
-      case OPCODE_ADD:
-      case OPCODE_SUB:
-      case OPCODE_MUL:
-      case OPCODE_AND:
-      case OPCODE_OR:
-      case OPCODE_XOR:
-      case OPCODE_LDR: {
+    if (find_free_register(cpu) == -1) {
+      cpu->fetch_from_next_cycle = TRUE;
+    } else {
+      /* Read operands from register file based on the instruction type */
+      switch (cpu->decode.opcode) {
+        case OPCODE_ADD:
+        case OPCODE_SUB:
+        case OPCODE_MUL:
+        case OPCODE_AND:
+        case OPCODE_OR:
+        case OPCODE_XOR:
+        case OPCODE_LDR: {
 
-        if (cpu->rename_table[cpu->decode.rd] != -1) {
-          cpu->renamed[cpu->rename_table[cpu->decode.rd]] = 1;
+          if (cpu->rename_table[cpu->decode.rd] != -1) {
+            cpu->renamed[cpu->rename_table[cpu->decode.rd]] = 1;
+          }
+
+          cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
+          cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
+
+          int physical_register = find_free_register(cpu);
+          if (physical_register != -1) {
+            cpu->rename_table[cpu->decode.rd] = physical_register;
+            cpu->decode.rd = physical_register;
+            cpu->allocation_list[physical_register] = 1;
+          }
+
+          if (cpu->forwarded[cpu->decode.rs1] != 1) {
+            if (cpu->status[cpu->decode.rs1] && cpu->allocation_list[cpu->decode.rs1])
+              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+          }
+
+          if (cpu->forwarded[cpu->decode.rs2] != 1) {
+            if (cpu->status[cpu->decode.rs2] && cpu->allocation_list[cpu->decode.rs2])
+              cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+          }
+          cpu->status[cpu->decode.rd] = 0;
+          break;
         }
 
-        cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
-        cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
+        case OPCODE_CMP: {
 
-        int physical_register = find_free_register(cpu);
-        if (physical_register != -1) {
-          cpu->rename_table[cpu->decode.rd] = physical_register;
-          cpu->decode.rd = physical_register;
-          cpu->allocation_list[physical_register] = 1;
+          cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
+          cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
+
+          if (cpu->forwarded[cpu->decode.rs1] != 1) {
+            if (cpu->status[cpu->decode.rs1] && cpu->allocation_list[cpu->decode.rs1])
+              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+          }
+
+          if (cpu->forwarded[cpu->decode.rs2] != 1) {
+            if (cpu->status[cpu->decode.rs2] && cpu->allocation_list[cpu->decode.rs2])
+              cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+          }
+          break;
         }
 
-        if (cpu->forwarded[cpu->decode.rs1] != 1) {
-          if (cpu->status[cpu->decode.rs1])
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+        case OPCODE_LOAD:
+        case OPCODE_ADDL:
+        case OPCODE_SUBL: {
+
+          if (cpu->rename_table[cpu->decode.rd] != -1) {
+            cpu->renamed[cpu->rename_table[cpu->decode.rd]] = 1;
+          }
+
+          cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
+
+          int physical_register = find_free_register(cpu);
+          if (physical_register != -1) {
+            cpu->rename_table[cpu->decode.rd] = physical_register;
+            cpu->decode.rd = physical_register;
+            cpu->allocation_list[physical_register] = 1;
+          }
+          if (cpu->forwarded[cpu->decode.rs1] != 1) {
+            if (cpu->status[cpu->decode.rs1] && cpu->allocation_list[cpu->decode.rs1])
+              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+          }
+
+          cpu->status[cpu->decode.rd] = 0;
+          break;
         }
 
-        if (cpu->forwarded[cpu->decode.rs2] != 1) {
-          if (cpu->status[cpu->decode.rs2])
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+        case OPCODE_STR: {
+
+          cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
+          cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
+          cpu->decode.rs3 = cpu->rename_table[cpu->decode.rs3];
+
+          if (cpu->forwarded[cpu->decode.rs1] != 1) {
+            if (cpu->status[cpu->decode.rs1] && cpu->allocation_list[cpu->decode.rs1])
+              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+          }
+
+          if (cpu->forwarded[cpu->decode.rs2] != 1) {
+            if (cpu->status[cpu->decode.rs2] && cpu->allocation_list[cpu->decode.rs2])
+              cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+          }
+
+          if (cpu->forwarded[cpu->decode.rs3] != 1) {
+            if (cpu->status[cpu->decode.rs3] && cpu->allocation_list[cpu->decode.rs3])
+              cpu->decode.rs3_value = cpu->regs[cpu->decode.rs3];
+          }
+
+          break;
         }
-        cpu->status[cpu->decode.rd] = 0;
-        break;
+
+        case OPCODE_STORE: {
+
+          cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
+          cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
+
+          if (cpu->forwarded[cpu->decode.rs1] != 1) {
+            if (cpu->status[cpu->decode.rs1] && cpu->allocation_list[cpu->decode.rs1])
+              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
+          }
+
+          if (cpu->forwarded[cpu->decode.rs2] != 1) {
+            if (cpu->status[cpu->decode.rs2] && cpu->allocation_list[cpu->decode.rs2])
+              cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+          }
+
+          break;
+        }
+
+        case OPCODE_MOVC: {
+          /* MOVC doesn't have register operands */
+
+          if (cpu->rename_table[cpu->decode.rd] != -1) {
+            cpu->renamed[cpu->rename_table[cpu->decode.rd]] = 1;
+          }
+
+          int physical_register = find_free_register(cpu);
+          if (physical_register != -1) {
+            cpu->rename_table[cpu->decode.rd] = physical_register;
+            cpu->decode.rd = physical_register;
+            cpu->allocation_list[physical_register] = 1;
+          }
+
+          cpu->status[cpu->decode.rd] = 0;
+          break;
+        }
+
+        case OPCODE_NOP:
+        case OPCODE_DIV: {
+          // Does Nothing
+          break;
+        }
       }
-
-      case OPCODE_CMP: {
-
-        cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
-        cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
-
-        if (cpu->forwarded[cpu->decode.rs1] != 1) {
-          if (cpu->status[cpu->decode.rs1])
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-        }
-
-        if (cpu->forwarded[cpu->decode.rs2] != 1) {
-          if (cpu->status[cpu->decode.rs2])
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-        }
-        break;
-      }
-
-      case OPCODE_LOAD:
-      case OPCODE_ADDL:
-      case OPCODE_SUBL: {
-
-        if (cpu->rename_table[cpu->decode.rd] != -1) {
-          cpu->renamed[cpu->rename_table[cpu->decode.rd]] = 1;
-        }
-
-        cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
-
-        int physical_register = find_free_register(cpu);
-        if (physical_register != -1) {
-          cpu->rename_table[cpu->decode.rd] = physical_register;
-          cpu->decode.rd = physical_register;
-          cpu->allocation_list[physical_register] = 1;
-        }
-        if (cpu->forwarded[cpu->decode.rs1] != 1) {
-          if (cpu->status[cpu->decode.rs1])
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-        }
-
-        cpu->status[cpu->decode.rd] = 0;
-        break;
-      }
-
-      case OPCODE_STR: {
-
-        cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
-        cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
-        cpu->decode.rs3 = cpu->rename_table[cpu->decode.rs3];
-
-        if (cpu->forwarded[cpu->decode.rs1] != 1) {
-          if (cpu->status[cpu->decode.rs1])
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-        }
-
-        if (cpu->forwarded[cpu->decode.rs2] != 1) {
-          if (cpu->status[cpu->decode.rs2])
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-        }
-
-        if (cpu->forwarded[cpu->decode.rs3] != 1) {
-          if (cpu->status[cpu->decode.rs3])
-            cpu->decode.rs3_value = cpu->regs[cpu->decode.rs3];
-        }
-
-        break;
-      }
-
-      case OPCODE_STORE: {
-
-        cpu->decode.rs1 = cpu->rename_table[cpu->decode.rs1];
-        cpu->decode.rs2 = cpu->rename_table[cpu->decode.rs2];
-
-        if (cpu->forwarded[cpu->decode.rs1] != 1) {
-          if (cpu->status[cpu->decode.rs1])
-            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-        }
-
-        if (cpu->forwarded[cpu->decode.rs2] != 1) {
-          if (cpu->status[cpu->decode.rs2])
-            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-        }
-
-        break;
-      }
-
-      case OPCODE_MOVC: {
-        /* MOVC doesn't have register operands */
-
-        if (cpu->rename_table[cpu->decode.rd] != -1) {
-          cpu->renamed[cpu->rename_table[cpu->decode.rd]] = 1;
-        }
-
-        int physical_register = find_free_register(cpu);
-        if (physical_register != -1) {
-          cpu->rename_table[cpu->decode.rd] = physical_register;
-          cpu->decode.rd = physical_register;
-          cpu->allocation_list[physical_register] = 1;
-        }
-
-        cpu->status[cpu->decode.rd] = 0;
-        break;
-      }
-
-      case OPCODE_NOP:
-      case OPCODE_DIV: {
-        // Does Nothing
-        break;
-      }
-    }
 
 //    print_rename_table(cpu);
-
-    APEX_dispatch(cpu);
-    APEX_issue(cpu);
-
+      APEX_dispatch(cpu);
+    }
     if (cpu->debug_messages) {
       print_stage_content("Decode/RF", &cpu->decode);
     }
@@ -305,6 +509,9 @@ APEX_decode(APEX_CPU *cpu) {
  */
 static void
 APEX_execute(APEX_CPU *cpu) {
+  APEX_issue(cpu);
+
+  APEX_MULU(cpu);
   APEX_INTU(cpu);
 }
 
@@ -313,69 +520,125 @@ void APEX_INTU(APEX_CPU *cpu) {
     /* Execute logic based on instruction type */
     switch (cpu->intu.opcode) {
       case OPCODE_ADD: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.result_buffer = cpu->intu.rs1_value + cpu->intu.rs2_value;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_ADDL: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
 
         cpu->intu.result_buffer = cpu->intu.rs1_value + cpu->intu.imm;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_SUB: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.result_buffer = cpu->intu.rs1_value - cpu->intu.rs2_value;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_SUBL: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
 
         cpu->intu.result_buffer = cpu->intu.rs1_value - cpu->intu.imm;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_MUL: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.result_buffer = cpu->intu.rs1_value * cpu->intu.rs2_value;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_AND: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.result_buffer = (unsigned char) cpu->intu.rs1_value & (unsigned char) cpu->intu.rs2_value;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_OR: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.result_buffer = (unsigned char) cpu->intu.rs1_value | (unsigned char) cpu->intu.rs2_value;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_XOR: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.result_buffer = (unsigned char) cpu->intu.rs1_value ^ (unsigned char) cpu->intu.rs2_value;
+
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         break;
       }
 
       case OPCODE_LOAD: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
 
         cpu->intu.memory_address = cpu->intu.rs1_value + cpu->intu.imm;
         //printf("Memory Address for load: %d\n", cpu->execute.memory_address);
@@ -383,23 +646,23 @@ void APEX_INTU(APEX_CPU *cpu) {
       }
 
       case OPCODE_LDR: {
-        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.memory_address = cpu->intu.rs1_value + cpu->intu.rs2_value;
         break;
       }
 
       case OPCODE_STORE: {
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
         cpu->intu.memory_address = cpu->intu.rs2_value + cpu->intu.imm;
         break;
       }
 
       case OPCODE_STR: {
-        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
-        cpu->intu.rs3_value = cpu->regs[cpu->intu.rs3];
+//        cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+//        cpu->intu.rs3_value = cpu->regs[cpu->intu.rs3];
 
         cpu->intu.memory_address = cpu->intu.rs2_value + cpu->intu.rs3_value;
         break;
@@ -417,7 +680,13 @@ void APEX_INTU(APEX_CPU *cpu) {
 
       case OPCODE_MOVC: {
         cpu->intu.result_buffer = cpu->intu.imm + 0;
+        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
 
+        if (cpu->renamed[cpu->intu.rd] == 1) {
+          cpu->allocation_list[cpu->intu.rd] = 0;
+        } else {
+          cpu->status[cpu->intu.rd] = 1;
+        }
         /* Set the zero flag based on the result buffer */
         if (cpu->intu.result_buffer == 0) {
           cpu->zero_flag = TRUE;
@@ -470,47 +739,39 @@ void APEX_INTU(APEX_CPU *cpu) {
       }
     }
 
-    /* Update the Register File based on instruction type */
-
-    switch (cpu->intu.opcode) {
-      case OPCODE_ADD:
-      case OPCODE_SUB:
-      case OPCODE_MUL:
-      case OPCODE_AND:
-      case OPCODE_OR:
-      case OPCODE_XOR:
-      case OPCODE_LDR:
-      case OPCODE_LOAD:
-      case OPCODE_MOVC:
-      case OPCODE_ADDL:
-      case OPCODE_SUBL: {
-        cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
-        cpu->status[cpu->intu.rd] = 1;
-        break;
-      }
-
-      case OPCODE_STR:
-      case OPCODE_STORE:
-      case OPCODE_CMP:
-      case OPCODE_NOP:
-      case OPCODE_DIV: {
-        /* No work needs to be done for above instructions. case statements
-        * are written just for the sake of completeness */
-        break;
-      }
-    }
-
     cpu->insn_completed++;
 
     forward_data_to_decode(cpu, &cpu->intu);
     forward_data_to_iq(cpu, &cpu->intu);
     /* Copy data from execute latch to memory latch*/
 //    cpu->memory = cpu->intu;
-    cpu->intu.has_insn = FALSE;
 
     if (cpu->debug_messages) {
       print_stage_content("INTU", &cpu->intu);
     }
+
+    cpu->intu.has_insn = FALSE;
+  }
+}
+
+void APEX_MULU(APEX_CPU *cpu) {
+  if (cpu->mulu.opcode == 2) {
+    if (cpu->mulu_count == 2) {
+      cpu->mulu.result_buffer = cpu->mulu.rs1_value * cpu->mulu.rs2_value;
+      cpu->mulu_count++;
+      cpu->mulu_count %= 3;
+      cpu->regs[cpu->mulu.rd] = cpu->mulu.result_buffer;
+      cpu->status[cpu->mulu.rd] = 1;
+      cpu->mulu.has_insn = FALSE;
+      forward_data_to_decode(cpu, &cpu->mulu);
+      forward_data_to_iq(cpu, &cpu->mulu);
+
+    } else {
+      cpu->mulu_count++;
+    }
+  }
+  if (cpu->debug_messages) {
+    print_stage_content("MULU", &cpu->mulu);
   }
 }
 
@@ -609,6 +870,7 @@ APEX_cpu_init(const char *filename) {
   cpu->reorder_buffer = get_reorder_buffer();
   cpu->rob_full = false;
   cpu->iq_full = false;
+  cpu->mulu_count = 0;
 
   /* Parse input file and create code memory */
   cpu->code_memory = create_code_memory(filename, &cpu->code_memory_size);
@@ -665,11 +927,11 @@ APEX_cpu_run(APEX_CPU *cpu, int count, bool print_contents) {
       printf("--------------------------------------------\n");
     }
 
-//    if (APEX_writeback(cpu)) {
-//      /* Halt in writeback stage */
-//      // printf("\nAPEX_CPU: Simulation Complete, cycles = %d instructions = %d\n", cpu->clock, cpu->insn_completed);
-//      break;
-//    }
+    if (cpu->decode.opcode == 0xc) {
+      /* Halt in writeback stage */
+      printf("\nAPEX_CPU: Simulation Complete, cycles = %d instructions = %d\n", cpu->clock, cpu->insn_completed);
+      break;
+    }
 
     APEX_memory(cpu);
     APEX_execute(cpu);
@@ -703,13 +965,15 @@ APEX_cpu_stop(APEX_CPU *cpu) {
  * @param cpu  pointer to current instance of cpu
  */
 void print_arf(APEX_CPU *cpu) {
+  print_rename_table(cpu);
   printf("\n------------------------------------------------------------------\n");
   printf("|              State of Architectural Register File              |\n");
   printf("------------------------------------------------------------------\n");
 
   for (int i = 0; i < REG_FILE_SIZE; ++i) {
-    printf("|   Register: R [%2d]    |   Value: %-5d  |   Status: %-7s    |\n",
-           i, cpu->regs[i], cpu->status[i] ? "Invalid" : "valid");
+    printf("|   Register: R [%2d]    |   Value: %-5d  |   Status: %-7s    |\n", i,
+           cpu->regs[cpu->rename_table[i]],
+           ((cpu->allocation_list[i]) && (cpu->status[i])) ? "Valid" : "Invalid");
   }
   printf("------------------------------------------------------------------\n");
 
@@ -806,13 +1070,13 @@ CPU_Stage get_nop_stage(CPU_Stage *nop) {
   nop->pc = 0;
   nop->has_insn = TRUE;
   nop->opcode = 0x12;
-  nop->rs1 = 0;
-  nop->rs2 = 0;
-  nop->rs3 = 0;
+  nop->rs1 = -1;
+  nop->rs2 = -1;
+  nop->rs3 = -1;
   nop->rs1_value = 0;
   nop->rs2_value = 0;
   nop->rs3_value = 0;
-  nop->rd = 0;
+  nop->rd = -1;
   nop->imm = 0;
   nop->result_buffer = 0;
   nop->memory_address = 0;
@@ -933,7 +1197,8 @@ void print_rename_table(APEX_CPU *cpu) {
  */
 void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage) {
   if (!(stage->opcode == 0x8 || stage->opcode == 0x9 || stage->opcode == 0xf
-      || stage->opcode == 0x10)) {
+      || stage->opcode == 0x10 || stage->opcode == 0x11 || stage->opcode == 0x12 || stage->opcode == 0xa
+      || stage->opcode == 0xb || stage->opcode == 0xc)) {
     switch (cpu->decode.opcode) {
       case OPCODE_ADD:
       case OPCODE_SUB:
@@ -946,12 +1211,12 @@ void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage) {
       case OPCODE_MOVC: {
         if (stage->rd == cpu->decode.rs1) {
           cpu->decode.rs1_value = stage->result_buffer;
-          cpu->forwarded[stage->rd] = 1;
+          cpu->forwarded[cpu->decode.rs1] = 1;
         }
 
         if (stage->rd == cpu->decode.rs2) {
           cpu->decode.rs2_value = stage->result_buffer;
-          cpu->forwarded[stage->rd] = 1;
+          cpu->forwarded[cpu->decode.rs2] = 1;
         }
         break;
       }
@@ -961,7 +1226,7 @@ void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage) {
       case OPCODE_LOAD: {
         if (stage->rd == cpu->decode.rs1) {
           cpu->decode.rs1_value = stage->result_buffer;
-          cpu->forwarded[stage->rd] = 1;
+          cpu->forwarded[cpu->decode.rs1] = 1;
         }
         break;
       }
@@ -969,7 +1234,7 @@ void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage) {
       case OPCODE_STORE: {
         if (stage->rd == cpu->decode.rs2) {
           cpu->decode.rs2_value = stage->result_buffer;
-          cpu->forwarded[stage->rd] = 1;
+          cpu->forwarded[cpu->decode.rs2] = 1;
         }
         break;
       }
@@ -977,7 +1242,7 @@ void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage) {
       case OPCODE_STR: {
         if (stage->rd == cpu->decode.rs3) {
           cpu->decode.rs3_value = stage->result_buffer;
-          cpu->forwarded[stage->rd] = 1;
+          cpu->forwarded[cpu->decode.rs3] = 1;
         }
 
         if (stage->rd == cpu->decode.rs2) {
@@ -1006,7 +1271,8 @@ void forward_data_to_iq(APEX_CPU *cpu, CPU_Stage *stage) {
     IQ_Entry *iq_entry = &cpu->issue_queue[i];
     if (cpu->iq_entry_used[i]) {
       if (!(stage->opcode == 0x8 || stage->opcode == 0x9 || stage->opcode == 0xf
-          || stage->opcode == 0x10)) {
+          || stage->opcode == 0x10 || stage->opcode == 0x11 || stage->opcode == 0x12 || stage->opcode == 0xa
+          || stage->opcode == 0xb || stage->opcode == 0xc)) {
         switch (iq_entry->opcode) {
           case OPCODE_ADD:
           case OPCODE_SUB:
@@ -1082,29 +1348,31 @@ void validate_iq_entry(APEX_CPU *cpu, IQ_Entry *iq_entry) {
     case OPCODE_LDR:
     case OPCODE_CMP:
     case OPCODE_STORE: {
-      if (cpu->status[iq_entry->rs1] == 0 || cpu->status[iq_entry->rs2] == 0)
-        iq_entry->valid = false;
-      else
+      if ((cpu->status[iq_entry->rs1] == 1 || cpu->forwarded[iq_entry->rs1] == 1)
+          && (cpu->status[iq_entry->rs2] == 1 || cpu->forwarded[iq_entry->rs2] == 1))
         iq_entry->valid = true;
+      else
+        iq_entry->valid = false;
       break;
     }
 
     case OPCODE_LOAD:
     case OPCODE_ADDL:
     case OPCODE_SUBL: {
-      if (cpu->status[iq_entry->rs1] == 0)
-        iq_entry->valid = false;
-      else
+      if (cpu->status[iq_entry->rs1] == 1 || cpu->forwarded[iq_entry->rs1] == 1)
         iq_entry->valid = true;
-
+      else
+        iq_entry->valid = false;
       break;
     }
 
     case OPCODE_STR: {
-      if (cpu->status[iq_entry->rs1] == 0 || cpu->status[iq_entry->rs2] == 0 || cpu->status[iq_entry->rs3] == 0)
-        iq_entry->valid = false;
-      else
+      if ((cpu->status[iq_entry->rs1] == 1 || cpu->forwarded[iq_entry->rs1] == 1)
+          && (cpu->status[iq_entry->rs2] == 1 || cpu->forwarded[iq_entry->rs2] == 1)
+          && (cpu->status[iq_entry->rs3] == 1 || cpu->forwarded[iq_entry->rs3] == 1))
         iq_entry->valid = true;
+      else
+        iq_entry->valid = false;
       break;
     }
 
@@ -1113,7 +1381,6 @@ void validate_iq_entry(APEX_CPU *cpu, IQ_Entry *iq_entry) {
       break;
     }
   }
-
 }
 
 /* Converts the PC(4000 series) into array index for code memory
@@ -1188,13 +1455,81 @@ static void print_instruction(const CPU_Stage *stage) {
   }
 }
 
+static void print_instruction_p(const CPU_Stage *stage) {
+  switch (stage->opcode) {
+
+    case OPCODE_ADD:
+    case OPCODE_SUB:
+    case OPCODE_MUL:
+    case OPCODE_AND:
+    case OPCODE_OR:
+    case OPCODE_XOR:
+    case OPCODE_LDR: {
+      printf("%s,P%d,P%d,P%d ", stage->opcode_str, stage->rd, stage->rs1,
+             stage->rs2);
+      break;
+    }
+
+    case OPCODE_LOAD:
+    case OPCODE_SUBL:
+    case OPCODE_ADDL: {
+      printf("%s,P%d,P%d,#%d ", stage->opcode_str, stage->rd, stage->rs1,
+             stage->imm);
+      break;
+    }
+
+    case OPCODE_STORE: {
+      printf("%s,P%d,P%d,#%d ", stage->opcode_str, stage->rs1, stage->rs2,
+             stage->imm);
+      break;
+    }
+
+    case OPCODE_STR: {
+      printf("%s,P%d,P%d,P%d ", stage->opcode_str, stage->rs1, stage->rs2,
+             stage->rs3);
+      break;
+    }
+
+    case OPCODE_MOVC: {
+      printf("%s,P%d,#%d ", stage->opcode_str, stage->rd, stage->imm);
+      break;
+    }
+
+    case OPCODE_CMP: {
+      printf("%s,P%d,P%d ", stage->opcode_str, stage->rs1, stage->rs2);
+      break;
+    }
+
+    case OPCODE_BZ:
+    case OPCODE_BNZ: {
+      printf("%s,#%d ", stage->opcode_str, stage->imm);
+      break;
+    }
+
+    case OPCODE_HALT:
+    case OPCODE_NOP: {
+      printf("%s", stage->opcode_str);
+      break;
+    }
+
+    case OPCODE_DIV: {
+      break;
+    }
+
+  }
+}
+
 /* Debug function which prints the CPU stage content
  *
  * Note: You can edit this function to print in more detail
  */
 static void print_stage_content(const char *name, const CPU_Stage *stage) {
   printf("%-15s: pc(%d) ", name, stage->pc);
-  print_instruction(stage);
+  if ((strcmp(name, "Fetch") == 0)) {
+    print_instruction(stage);
+  } else {
+    print_instruction_p(stage);
+  }
   printf("\n");
 }
 

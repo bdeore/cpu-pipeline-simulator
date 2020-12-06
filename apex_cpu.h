@@ -92,6 +92,7 @@ typedef struct APEX_CPU {
   int debug_messages;
   bool rob_full;
   bool iq_full;
+  int mulu_count;
 
   /* Pipeline stages */
   CPU_Stage fetch;
@@ -119,6 +120,7 @@ void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage);
 void forward_data_to_iq(APEX_CPU *cpu, CPU_Stage *stage);
 
 void APEX_INTU(APEX_CPU *cpu);
+void APEX_MULU(APEX_CPU *cpu);
 
 void APEX_issue(APEX_CPU *cpu);
 void APEX_dispatch(APEX_CPU *cpu);
@@ -128,12 +130,15 @@ void insert_rob_entry(APEX_CPU *cpu);
 bool increment_rob_head(APEX_CPU *cpu);
 void insert_iq_entry(APEX_CPU *cpu);
 void validate_iq_entry(APEX_CPU *cpu, IQ_Entry *entry);
+CPU_Stage pick_entry(APEX_CPU *cpu, char *function_unit);
+CPU_Stage remove_iq_entry(APEX_CPU *cpu, int entry_index);
 
 void print_issue_queue(APEX_CPU *cpu);
 void print_reorder_buffer(APEX_CPU *cpu);
 void print_rename_table(APEX_CPU *cpu);
 static int get_code_memory_index_from_pc(int pc);
 static void print_instruction(const CPU_Stage *stage);
+static void print_instruction_p(const CPU_Stage *stage);
 static void print_stage_content(const char *name, const CPU_Stage *stage);
 
 int find_free_register(APEX_CPU *cpu);
