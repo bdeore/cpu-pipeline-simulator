@@ -30,8 +30,9 @@ void APEX_issue(APEX_CPU *cpu) {
       cpu->m1 = get_nop_stage(&nop);
       validate_rob_entries(cpu);
     }
-  } else
+  } else {
     cpu->m1 = get_nop_stage(&nop);
+  }
 
   //  cpu->jbu1 = pick_entry(cpu, "jbu");
 }
@@ -774,15 +775,11 @@ APEX_decode(APEX_CPU *cpu) {
             cpu->allocation_list[physical_register] = 1;
           }
 
-          if (cpu->forwarded[cpu->decode.rs1] != 1) {
-            if (cpu->status[cpu->decode.rs1] == 1 && cpu->allocation_list[cpu->decode.rs1] == 1)
-              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-          }
+          if (cpu->status[cpu->decode.rs1] == 1 && cpu->allocation_list[cpu->decode.rs1] == 1)
+            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
 
-          if (cpu->forwarded[cpu->decode.rs2] != 1) {
-            if (cpu->status[cpu->decode.rs2] == 1 && cpu->allocation_list[cpu->decode.rs2] == 1)
-              cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-          }
+          if (cpu->status[cpu->decode.rs2] == 1 && cpu->allocation_list[cpu->decode.rs2] == 1)
+            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
 
           cpu->status[cpu->decode.rd] = 0;
           break;
@@ -793,15 +790,12 @@ APEX_decode(APEX_CPU *cpu) {
           cpu->decode.rs1 = cpu->rat[cpu->decode.rs1];
           cpu->decode.rs2 = cpu->rat[cpu->decode.rs2];
 
-          if (cpu->forwarded[cpu->decode.rs1] != 1) {
-            if (cpu->status[cpu->decode.rs1] == 1 && cpu->allocation_list[cpu->decode.rs1] == 1)
-              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-          }
+          if (cpu->status[cpu->decode.rs1] == 1 && cpu->allocation_list[cpu->decode.rs1] == 1)
+            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
 
-          if (cpu->forwarded[cpu->decode.rs2] != 1) {
-            if (cpu->status[cpu->decode.rs2] == 1 && cpu->allocation_list[cpu->decode.rs2] == 1)
-              cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
-          }
+          if (cpu->status[cpu->decode.rs2] == 1 && cpu->allocation_list[cpu->decode.rs2] == 1)
+            cpu->decode.rs2_value = cpu->regs[cpu->decode.rs2];
+
           break;
         }
 
@@ -819,10 +813,8 @@ APEX_decode(APEX_CPU *cpu) {
             cpu->allocation_list[physical_register] = 1;
           }
 
-          if (cpu->forwarded[cpu->decode.rs1] != 1) {
-            if (cpu->status[cpu->decode.rs1] == 1 && cpu->allocation_list[cpu->decode.rs1] == 1)
-              cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
-          }
+          if (cpu->status[cpu->decode.rs1] == 1 && cpu->allocation_list[cpu->decode.rs1] == 1)
+            cpu->decode.rs1_value = cpu->regs[cpu->decode.rs1];
 
           cpu->status[cpu->decode.rd] = 0;
           break;
@@ -928,12 +920,10 @@ void APEX_INTU(APEX_CPU *cpu) {
   /* Execute logic based on instruction type */
   switch (cpu->intu.opcode) {
     case OPCODE_ADD: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value + cpu->intu.rs2_value;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+      cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value + cpu->intu.rs2_value;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -951,12 +941,9 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_ADDL: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value + cpu->intu.imm;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value + cpu->intu.imm;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -974,12 +961,10 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_SUB: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value - cpu->intu.rs2_value;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+      cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value - cpu->intu.rs2_value;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -997,12 +982,9 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_SUBL: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value - cpu->intu.imm;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value - cpu->intu.imm;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -1020,12 +1002,10 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_AND: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value & cpu->intu.rs2_value;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+      cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value & cpu->intu.rs2_value;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -1037,12 +1017,10 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_OR: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value | cpu->intu.rs2_value;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+      cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value | cpu->intu.rs2_value;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -1054,12 +1032,10 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_EXOR: {
-      cpu->intu.result_buffer = cpu->intu.rs1_value ^ cpu->intu.rs2_value;
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+      cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
+      cpu->intu.result_buffer = cpu->intu.rs1_value ^ cpu->intu.rs2_value;
 
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
@@ -1071,6 +1047,9 @@ void APEX_INTU(APEX_CPU *cpu) {
     }
 
     case OPCODE_CMP: {
+      cpu->intu.rs1_value = cpu->regs[cpu->intu.rs1];
+      cpu->intu.rs2_value = cpu->regs[cpu->intu.rs2];
+
       if (cpu->intu.rs1_value == cpu->intu.rs2_value) {
         cpu->zero_flag = TRUE;
       } else {
@@ -1082,23 +1061,12 @@ void APEX_INTU(APEX_CPU *cpu) {
     case OPCODE_MOVC: {
       cpu->intu.result_buffer = cpu->intu.imm + 0;
 
-      if (cpu->r_rat[cpu->intu.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->intu.rd_arch]] = 0;
-      }
-
       cpu->regs[cpu->intu.rd] = cpu->intu.result_buffer;
       cpu->status[cpu->intu.rd] = 1;
 
       cpu->r_rat[cpu->intu.rd_arch] = cpu->intu.rd;
       cpu->r_rat_status[cpu->intu.rd_arch] = 1;
 
-      /* Set the zero flag based on the result buffer */
-      if (cpu->intu.result_buffer == 0) {
-        cpu->zero_flag = TRUE;
-      } else {
-        cpu->zero_flag = FALSE;
-      }
       break;
     }
 
@@ -1189,44 +1157,32 @@ void APEX_M1(APEX_CPU *cpu) {
   switch (cpu->m1.opcode) {
 
     case OPCODE_LOAD: {
-      if (cpu->status[cpu->m1.rs1] == 1 && cpu->allocation_list[cpu->m1.rs1] == 1)
-        cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
+      cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
 
       cpu->m1.memory_address = cpu->m1.rs1_value + cpu->m1.imm;
       break;
     }
 
     case OPCODE_LDR: {
-      if (cpu->status[cpu->m1.rs1] == 1 && cpu->allocation_list[cpu->m1.rs1] == 1)
-        cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
-
-      if (cpu->status[cpu->m1.rs2] == 1 && cpu->allocation_list[cpu->m1.rs2] == 1)
-        cpu->m1.rs2_value = cpu->regs[cpu->m1.rs2];
+      cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
+      cpu->m1.rs2_value = cpu->regs[cpu->m1.rs2];
 
       cpu->m1.memory_address = cpu->m1.rs1_value + cpu->m1.rs2_value;
       break;
     }
 
     case OPCODE_STORE: {
-      if (cpu->status[cpu->m1.rs1] == 1 && cpu->allocation_list[cpu->m1.rs1] == 1)
-        cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
-
-      if (cpu->status[cpu->m1.rs2] == 1 && cpu->allocation_list[cpu->m1.rs2] == 1)
-        cpu->m1.rs2_value = cpu->regs[cpu->m1.rs2];
+      cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
+      cpu->m1.rs2_value = cpu->regs[cpu->m1.rs2];
 
       cpu->m1.memory_address = cpu->m1.rs2_value + cpu->m1.imm;
       break;
     }
 
     case OPCODE_STR: {
-      if (cpu->status[cpu->m1.rs1] == 1 && cpu->allocation_list[cpu->m1.rs1] == 1)
-        cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
-
-      if (cpu->status[cpu->m1.rs2] == 1 && cpu->allocation_list[cpu->m1.rs2] == 1)
-        cpu->m1.rs2_value = cpu->regs[cpu->m1.rs2];
-
-      if (cpu->status[cpu->m1.rs3] == 1 && cpu->allocation_list[cpu->m1.rs3] == 1)
-        cpu->m1.rs3_value = cpu->regs[cpu->m1.rs3];
+      cpu->m1.rs1_value = cpu->regs[cpu->m1.rs1];
+      cpu->m1.rs2_value = cpu->regs[cpu->m1.rs2];
+      cpu->m1.rs3_value = cpu->regs[cpu->m1.rs3];
 
       cpu->m1.memory_address = cpu->m1.rs2_value + cpu->m1.rs3_value;
       break;
@@ -1247,11 +1203,6 @@ void APEX_M2(APEX_CPU *cpu) {
     case OPCODE_LDR: {
       cpu->m2.result_buffer = cpu->data_memory[cpu->m2.memory_address];
 
-      if (cpu->r_rat[cpu->m2.rd_arch] != -1) {
-        cpu->allocation_list[cpu->r_rat[cpu->m2.rd_arch]] = 0;
-        cpu->status[cpu->r_rat[cpu->m2.rd_arch]] = 0;
-      }
-
       cpu->regs[cpu->m2.rd] = cpu->m2.result_buffer;
       cpu->status[cpu->m2.rd] = 1;
 
@@ -1260,6 +1211,7 @@ void APEX_M2(APEX_CPU *cpu) {
 
       forward_data_to_decode(cpu, &cpu->m2);
       forward_data_to_iq(cpu, &cpu->m2);
+
       break;
     }
 
@@ -1562,7 +1514,7 @@ APEX_cpu_run(APEX_CPU *cpu, int count, bool print_contents) {
       printf("--------------------------------------------\n");
     }
 
-    if (cpu->decode.opcode == 0xc) {
+    if (cpu->decode.has_insn && cpu->decode.opcode == 0xc) {
       cpu->fetch_from_next_cycle = true;
 //      printf("\nmulu count: %d %d\n", cpu->mulu_count, issue_queue_empty(cpu));
       if (issue_queue_empty(cpu) && cpu->m2.has_insn == false) {

@@ -130,7 +130,6 @@ void show_mem(APEX_CPU *cpu, int address);
 CPU_Stage get_nop_stage(CPU_Stage *nop);
 void forward_data_to_decode(APEX_CPU *cpu, CPU_Stage *stage);
 void forward_data_to_iq(APEX_CPU *cpu, CPU_Stage *stage);
-
 void APEX_INTU(APEX_CPU *cpu);
 void APEX_MULU(APEX_CPU *cpu);
 void APEX_M1(APEX_CPU *cpu);
