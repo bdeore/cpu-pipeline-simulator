@@ -20,7 +20,7 @@
 #define OPCODE_DIV 0x3
 #define OPCODE_AND 0x4
 #define OPCODE_OR 0x5
-#define OPCODE_XOR 0x6
+#define OPCODE_EXOR 0x6
 #define OPCODE_MOVC 0x7
 #define OPCODE_LOAD 0x8
 #define OPCODE_STORE 0x9
@@ -33,6 +33,8 @@
 #define OPCODE_STR 0x10
 #define OPCODE_CMP 0x11
 #define OPCODE_NOP 0x12
+#define OPCODE_JUMP 0x13
+#define OPCODE_JAL 0x14
 
 
 /* Set this flag to 1 to enable debug messages */

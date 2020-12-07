@@ -29,6 +29,7 @@ typedef struct CPU_Stage {
   int rs2;
   int rs3;
   int rd;
+  int rd_arch;
   int imm;
   int rs1_value;
   int rs2_value;
@@ -46,6 +47,7 @@ typedef struct IQ_Entry {
   int rs2;
   int rs3;
   int rd;
+  int rd_arch;
   int imm;
   int rs1_value;
   int rs2_value;
@@ -58,9 +60,15 @@ typedef struct IQ_Entry {
 typedef struct ROB_Entry {
   bool status;
   char instruction_type[50];
+  char opcode_str[128];
+  int opcode;
   int pc_value;
-  int dest_physical_reg;
-  int dest_architectural_reg;
+  int rd_phy;
+  int rd_arch;
+  int rs1;
+  int rs2;
+  int rs3;
+  int imm;
   int mready;
 } ROB_Entry;
 
@@ -77,9 +85,11 @@ typedef struct APEX_CPU {
   int regs[REG_FILE_SIZE];                      /* Unified Integer register file */
   int status[REG_FILE_SIZE];                    /* status bits for each register in register file */
   int forwarded[REG_FILE_SIZE];                 /* status bits to indicate if result has been forwarded */
-  int rename_table[RENAME_TABLE_SIZE];
+  int rat[RENAME_TABLE_SIZE];
+  int r_rat[RENAME_TABLE_SIZE];
+  int rat_status[RENAME_TABLE_SIZE];
+  int r_rat_status[RENAME_TABLE_SIZE];
   int allocation_list[REG_FILE_SIZE];
-  int renamed[REG_FILE_SIZE];
   int iq_entry_used[IQ_SIZE];                   /* status bits to indicate empty issue queue entries */
   IQ_Entry issue_queue[IQ_SIZE];                /* issue queue */
   ROB_Queue reorder_buffer;                     /* reorder buffer */
@@ -103,6 +113,8 @@ typedef struct APEX_CPU {
   CPU_Stage jbu1;
   CPU_Stage jbu2;
   CPU_Stage mulu;
+  CPU_Stage m1;
+  CPU_Stage m2;
 
 } APEX_CPU;
 
@@ -121,21 +133,28 @@ void forward_data_to_iq(APEX_CPU *cpu, CPU_Stage *stage);
 
 void APEX_INTU(APEX_CPU *cpu);
 void APEX_MULU(APEX_CPU *cpu);
+void APEX_M1(APEX_CPU *cpu);
+void APEX_M2(APEX_CPU *cpu);
 
 void APEX_issue(APEX_CPU *cpu);
 void APEX_dispatch(APEX_CPU *cpu);
 ROB_Queue get_reorder_buffer();
 bool queue_insert(APEX_CPU *cpu, ROB_Entry rob_entry);
-void insert_rob_entry(APEX_CPU *cpu);
+void insert_rob_entry(APEX_CPU *cpu, int is_ready);
 bool increment_rob_head(APEX_CPU *cpu);
+bool increment_rob_tail(APEX_CPU *cpu);
 void insert_iq_entry(APEX_CPU *cpu);
 void validate_iq_entry(APEX_CPU *cpu, IQ_Entry *entry);
+void validate_rob_entries(APEX_CPU *cpu);
 CPU_Stage pick_entry(APEX_CPU *cpu, char *function_unit);
 CPU_Stage remove_iq_entry(APEX_CPU *cpu, int entry_index);
+CPU_Stage remove_rob_entry(APEX_CPU *cpu);
+bool rob_empty(APEX_CPU *cpu);
+bool issue_queue_empty(APEX_CPU *cpu);
 
 void print_issue_queue(APEX_CPU *cpu);
 void print_reorder_buffer(APEX_CPU *cpu);
-void print_rename_table(APEX_CPU *cpu);
+void print_rat(APEX_CPU *cpu);
 static int get_code_memory_index_from_pc(int pc);
 static void print_instruction(const CPU_Stage *stage);
 static void print_instruction_p(const CPU_Stage *stage);
