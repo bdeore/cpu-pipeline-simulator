@@ -56,6 +56,14 @@ void generate_prompt(APEX_CPU *cpu, const char *filename) {
         display(cpu);
         clear_buffer();
 
+      } else if (strcmp(user_prompt_val, "print_rob") == 0 || strcmp(user_prompt_val, "PrintROB") == 0) {
+        print_reorder_buffer(cpu);
+        clear_buffer();
+
+      } else if (strcmp(user_prompt_val, "print_iq") == 0 || strcmp(user_prompt_val, "PrintIQ") == 0) {
+        print_issue_queue(cpu);
+        clear_buffer();
+
       } else if (strcmp(user_prompt_val, "simulate") == 0 || strcmp(user_prompt_val, "Simulate") == 0) {
         scanf("%d", &count);
         APEX_cpu_run(cpu, count, true);
@@ -73,11 +81,13 @@ void generate_prompt(APEX_CPU *cpu, const char *filename) {
             user_prompt_val);
         printf("\n commands supported:\n");
         printf("--------------------------------------------------------------------\n");
-        printf("   [initialize | init]  - to initialize cpu\n"
-               "   [s|Simulate <count>] - to simulate <count> cycles\n"
-               "   [d|Display]          - to display stage contents\n"
-               "   [showmem <address>]  - to show contents in memory <address>\n"
-               "   [n|next]             - proceed by one cycle\n");
+        printf("   [initialize | init]     - to initialize cpu\n"
+               "   [s|Simulate <count>]    - to simulate <count> cycles\n"
+               "   [d|Display]             - to display stage contents\n"
+               "   [showmem <address>]     - to show contents in memory <address>\n"
+               "   [PrintROB | print_rob]  - to print contents of ROB\n"
+               "   [PrintIQ | print_iq]    - to print contents of Issue Queue\n"
+               "   [n|next]                - proceed by one cycle\n");
         printf("--------------------------------------------------------------------\n");
       }
     }

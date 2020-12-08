@@ -11,7 +11,7 @@ add_executable(apex_sim_2
     apex_macros.h
     CMakeLists.txt
     file_parser.c
-    input.asm
+    new_1.asm
     main.c
     Makefile
     README.md)

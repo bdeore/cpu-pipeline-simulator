@@ -4,7 +4,7 @@ VERSION=2.0
 
 # Compile and Link flags, libraries
 CC=$(CROSS_PREFIX)gcc
-CFLAGS= -g -Wall -Wextra -pedantic -O0 -DVERSION=$(VERSION)
+CFLAGS= -O0 -DVERSION=$(VERSION)
 LDFLAGS=
 LIBS=
 
