@@ -134,6 +134,8 @@ void APEX_INTU(APEX_CPU *cpu);
 void APEX_MULU(APEX_CPU *cpu);
 void APEX_M1(APEX_CPU *cpu);
 void APEX_M2(APEX_CPU *cpu);
+void APEX_JBU1(APEX_CPU *cpu);
+void APEX_JBU2(APEX_CPU *cpu);
 
 void APEX_issue(APEX_CPU *cpu);
 void APEX_dispatch(APEX_CPU *cpu);
