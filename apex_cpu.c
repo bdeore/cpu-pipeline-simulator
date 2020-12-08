@@ -1599,6 +1599,15 @@ CPU_Stage remove_rob_entry(APEX_CPU *cpu) {
       break;
     }
   }
+  IQ_Entry *entry;
+  for (int i = 0; i < IQ_SIZE; i++) {
+    entry = &cpu->issue_queue[i];
+    if (entry->pc == stage.pc) {
+      cpu->iq_entry_used[i] = 0;
+      break;
+    }
+  }
+
   return stage;
 }
 
